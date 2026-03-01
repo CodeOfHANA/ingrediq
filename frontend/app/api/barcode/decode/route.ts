@@ -11,6 +11,18 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'No image provided' }, { status: 400 })
         }
 
+        // Guard against oversized uploads (max 10 MB)
+        const MAX_BYTES = 10 * 1024 * 1024
+        if (file.size > MAX_BYTES) {
+            return NextResponse.json({ error: 'Image too large. Please use a photo under 10 MB.' }, { status: 413 })
+        }
+
+        // Only accept image MIME types
+        const VALID_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp']
+        if (!VALID_TYPES.includes(file.type)) {
+            return NextResponse.json({ error: 'Unsupported file type. Use JPG, PNG, or WEBP.' }, { status: 415 })
+        }
+
         // Read file bytes robustly
         const arrayBuffer = await file.arrayBuffer()
         const inputBuffer = Buffer.from(arrayBuffer)
@@ -70,8 +82,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ code })
 
     } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
-        console.error('[barcode-decode]', msg)
-        return NextResponse.json({ error: `Server error: ${msg}` }, { status: 500 })
+        console.error('[barcode-decode]', err instanceof Error ? err.message : String(err))
+        return NextResponse.json({ error: 'Barcode processing failed. Please try again or enter the number manually.' }, { status: 500 })
     }
 }
