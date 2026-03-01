@@ -1,0 +1,10 @@
+streamlit
+groq
+pytesseract
+Pillow
+opencv-python
+pyzbar
+requests
+supabase
+python-dotenv
+numpy

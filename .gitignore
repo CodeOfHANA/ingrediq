@@ -1,0 +1,15 @@
+# Environment variables
+.env
+.env.txt
+
+# User runtime data — ignored so personal data is never committed
+data/user_id.txt
+data/profiles/local.json
+data/history/local.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python

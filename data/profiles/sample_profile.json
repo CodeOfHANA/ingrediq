@@ -1,0 +1,18 @@
+{
+  "user_id": "demo-user-0000-0000-000000000001",
+  "name": "Demo User",
+  "presets": ["halal", "gluten_free"],
+  "medical_conditions": ["diabetes"],
+  "allergies": ["peanuts", "shellfish"],
+  "medications": ["metformin"],
+  "lab_values": {
+    "blood_sugar_mmol": 7.2,
+    "cholesterol_mmol": 5.1,
+    "sodium_mmol": null,
+    "creatinine_umol": null,
+    "potassium_mmol": null
+  },
+  "preferences": [],
+  "created_at": "2026-03-01T09:00:00+00:00",
+  "updated_at": "2026-03-01T09:00:00+00:00"
+}

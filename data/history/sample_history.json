@@ -1,0 +1,74 @@
+[
+    {
+        "product_name": "Kellogg's Corn Flakes",
+        "ingredients_text": "Milled corn, sugar, salt, barley malt flavouring, niacinamide, iron, vitamin B6, riboflavin, thiamin, folic acid, vitamin D, vitamin B12",
+        "source": "manual",
+        "confidence": "HIGH",
+        "verdict": "CAUTION",
+        "flags": [
+            {
+                "ingredient": "sugar",
+                "reason": "Added sugar conflicts with your diabetic profile — may cause blood glucose spikes",
+                "severity": "MEDIUM",
+                "conflicts_with": "diabetes"
+            },
+            {
+                "ingredient": "barley malt flavouring",
+                "reason": "Barley contains gluten, which conflicts with your gluten-free preset",
+                "severity": "HIGH",
+                "conflicts_with": "gluten_free"
+            }
+        ],
+        "summary": "This product contains barley malt (gluten) and added sugar, both of which conflict with your active presets. Not recommended for your profile. This is not medical advice. Consult your doctor.",
+        "alternative_suggestion": null,
+        "scanned_at": "2026-03-01T08:30:00+00:00"
+    },
+    {
+        "product_name": "Alpro Oat Drink Original",
+        "ingredients_text": "Oat base (water, whole grain oats 10%), sunflower oil, calcium carbonate, sea salt, vitamins (D2, riboflavin, B12)",
+        "source": "barcode",
+        "confidence": "HIGH",
+        "verdict": "CAUTION",
+        "flags": [
+            {
+                "ingredient": "whole grain oats",
+                "reason": "Oats may be cross-contaminated with gluten depending on processing facility — check packaging for certified gluten-free label",
+                "severity": "MEDIUM",
+                "conflicts_with": "gluten_free"
+            }
+        ],
+        "summary": "This product is dairy-free and halal-suitable, but oats carry a potential gluten cross-contamination risk for your gluten-free preset. This is not medical advice. Consult your doctor.",
+        "alternative_suggestion": null,
+        "scanned_at": "2026-03-01T08:45:00+00:00"
+    },
+    {
+        "product_name": "Haribo Goldbears",
+        "ingredients_text": "Glucose syrup, sugar, gelatin (pork), dextrose, citric acid, fruit juice concentrates, flavouring, colouring (anthocyanins, curcumin, paprika extract)",
+        "source": "manual",
+        "confidence": "HIGH",
+        "verdict": "AVOID",
+        "flags": [
+            {
+                "ingredient": "gelatin (pork)",
+                "reason": "Pork gelatin is haram and strictly prohibited under your halal preset",
+                "severity": "HIGH",
+                "conflicts_with": "halal"
+            },
+            {
+                "ingredient": "glucose syrup",
+                "reason": "High glycaemic index sweetener — strongly conflicts with your diabetic profile",
+                "severity": "HIGH",
+                "conflicts_with": "diabetes"
+            },
+            {
+                "ingredient": "sugar",
+                "reason": "Added sugar conflicts with diabetic profile",
+                "severity": "MEDIUM",
+                "conflicts_with": "diabetes"
+            }
+        ],
+        "summary": "This product contains pork gelatin (haram) and multiple high-sugar ingredients that conflict with both your halal preset and diabetic profile. Do not consume. This is not medical advice. Consult your doctor.",
+        "alternative_suggestion": "Look for halal-certified, sugar-free gummies made with plant-based or bovine halal gelatin",
+        "scanned_at": "2026-03-01T09:00:00+00:00"
+    }
+]
