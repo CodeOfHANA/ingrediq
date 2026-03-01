@@ -24,8 +24,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-    const profile = (await req.json()) as Profile & { id?: string }
+    const body = await req.json()
+    const profile = body as Profile & { id?: string }
     if (!profile?.user_id) return NextResponse.json({ error: 'user_id required' }, { status: 400 })
+
+    console.log('[profile:POST] user_id:', profile.user_id, 'keys:', Object.keys(body))
 
     const sb = getServerSupabase()
     const row = {
@@ -39,32 +42,50 @@ export async function POST(req: NextRequest) {
         updated_at: new Date().toISOString(),
     }
 
-    try {
-        // Insert-or-update: try INSERT first.
-        // If 23505 (duplicate user_id), catch it and UPDATE instead.
-        // No SELECT anywhere — completely immune to RLS blocking reads.
-        const { error: insertErr } = await sb
+    // Step 1: Always try UPDATE first (safe even if row doesn't exist)
+    const { error: updateErr, count } = await sb
+        .from('profiles')
+        .update(row)
+        .eq('user_id', profile.user_id)
+
+    console.log('[profile:POST] UPDATE result:', { updateErr, count })
+
+    if (!updateErr) {
+        // UPDATE succeeded (may have matched 0 rows — that's fine, we'll insert below)
+        // Check if the row actually exists now by trying SELECT
+        const { data: check } = await sb
             .from('profiles')
-            .insert({ user_id: profile.user_id, ...row })
+            .select('user_id')
+            .eq('user_id', profile.user_id)
+            .maybeSingle()
 
-        if (insertErr) {
-            if (insertErr.code === '23505') {
-                // Row already exists — UPDATE it
-                const { error: updateErr } = await sb
-                    .from('profiles')
-                    .update(row)
-                    .eq('user_id', profile.user_id)
-                if (updateErr) throw updateErr
-            } else {
-                throw insertErr
-            }
+        console.log('[profile:POST] SELECT check:', check)
+
+        if (check) {
+            // Row exists — UPDATE worked
+            return NextResponse.json({ ok: true })
         }
-
-        return NextResponse.json({ ok: true })
-
-    } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : JSON.stringify(e)
-        console.error('Profile POST error:', msg)
-        return NextResponse.json({ error: msg || 'Save failed' }, { status: 500 })
     }
+
+    // Step 2: Row doesn't exist — INSERT
+    console.log('[profile:POST] Inserting new row for:', profile.user_id)
+    const { error: insertErr } = await sb
+        .from('profiles')
+        .insert({ user_id: profile.user_id, ...row })
+
+    if (insertErr) {
+        // If INSERT also fails (23505 race, RLS, etc.) — try UPDATE one more time
+        console.log('[profile:POST] INSERT failed:', insertErr.code, insertErr.message, '— retrying UPDATE')
+        const { error: retryErr } = await sb
+            .from('profiles')
+            .update(row)
+            .eq('user_id', profile.user_id)
+
+        if (retryErr) {
+            console.error('[profile:POST] FINAL FAIL:', JSON.stringify(retryErr))
+            return NextResponse.json({ error: retryErr.message || 'Save failed' }, { status: 500 })
+        }
+    }
+
+    return NextResponse.json({ ok: true })
 }
