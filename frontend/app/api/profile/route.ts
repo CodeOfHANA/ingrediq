@@ -39,11 +39,13 @@ export async function POST(req: NextRequest) {
             lab_values: profile.lab_values ?? {},
             preferences: profile.preferences ?? [],
             updated_at: new Date().toISOString(),
-        })
+        }, { onConflict: 'user_id' })
         if (error) throw error
         return NextResponse.json({ ok: true })
-    } catch (e) {
-        console.error('Profile POST error:', e)
-        return NextResponse.json({ error: 'Save failed' }, { status: 500 })
+    } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e)
+        console.error('Profile POST error:', msg)
+        return NextResponse.json({ error: msg || 'Save failed' }, { status: 500 })
     }
+
 }

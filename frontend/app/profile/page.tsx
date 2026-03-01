@@ -65,7 +65,7 @@ export default function ProfilePage() {
             .then(r => r.json())
             .then(data => {
                 if (data && data.name) {
-                    const { user_id: _, created_at: __, updated_at: ___, ...rest } = data
+                    const { user_id: _, id: _id, created_at: __, updated_at: ___, ...rest } = data
                     setForm(rest)
                 }
             })
