@@ -52,7 +52,8 @@ export async function POST(req: NextRequest) {
         const wasmBinary = fs.readFileSync(wasmPath)
 
         // Init zbar-wasm with the manually provided binary
-        const zbarWasm = await import('@undecaf/zbar-wasm')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const zbarWasm = await import('@undecaf/zbar-wasm') as any
         if (typeof zbarWasm.setZbarModuleFactoryOptions === 'function') {
             zbarWasm.setZbarModuleFactoryOptions({ wasmBinary })
         }
