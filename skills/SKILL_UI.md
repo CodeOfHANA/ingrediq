@@ -1,6 +1,76 @@
-# IngredIQ — Streamlit UI Skill File
+# IngredIQ — UI Skill File
 
-## App Structure
+---
+
+## Next.js / CSS Patterns (Active App)
+
+### Styling approach
+All styles live in `frontend/app/globals.css`. No component library — pure custom CSS with design tokens.
+
+### Design tokens (CSS variables)
+```css
+--primary: #2d6a4f;        /* herb green */
+--primary-lt: #40916c;     /* sage hover */
+--primary-dk: #1b4332;     /* deep forest */
+--accent: #d4a017;         /* turmeric gold */
+--safe: #1b7a4a; --safe-bg: #d8f3e3;
+--caution: #c77c1a; --caution-bg: #fdefd3;
+--avoid: #a82c2c; --avoid-bg: #fde0e0;
+--bg: #faf8f3;             /* warm parchment */
+--surface: #ffffff;
+--surface-warm: #f5f0e8;
+--text: #1a1a14;
+--text-muted: #6b6b55;
+--border: #e0dbd0;
+--radius: 12px;
+```
+
+### Key CSS classes
+| Class | Purpose |
+|---|---|
+| `.verdict-card.safe/caution/avoid` | Verdict result card |
+| `.confidence-badge` | Pill under verdict label (HIGH/MEDIUM/LOW) |
+| `.share-btn` / `.share-toast` | Share button + clipboard toast |
+| `.flag-item` / `.flag-toggle` / `.flag-body` | Expandable flag accordion |
+| `.chat-section` / `.chat-bubble-user` / `.chat-bubble-assistant` | AI chat UI |
+| `.chat-input-row` | Chat input + send button row |
+| `.onboarding-card` / `.onboarding-step-indicator` | 2-step onboarding wizard |
+| `.preset-btn` / `.preset-btn--active` | Dietary preset toggle buttons |
+| `.alert-error` / `.alert-warn` / `.alert-info` | Alert banners |
+| `.btn` / `.btn-primary` / `.btn-full` / `.btn-sm` | Buttons |
+| `.spinner` / `.spinner-wrap` | Loading states |
+
+### Component patterns
+
+#### VerdictCard
+Accepts `result: ScanResult`, `confidence?: Confidence`, `productName?: string`.
+Renders verdict + confidence badge + share button (navigator.share on mobile, clipboard on desktop).
+
+#### FlagList
+Accepts `flags: Flag[]`. Each flag is an expandable accordion item showing ingredient, reason, severity pill, conflicts_with.
+
+#### Sidebar
+Self-fetches profile — re-fetches on every `pathname` change (usePathname as useEffect dependency). Do NOT pass profile as prop.
+
+#### Onboarding wizard (app/page.tsx)
+- Checks if profile exists on mount
+- New users → 2-step wizard (name + presets → allergies + medical) → saves → redirects to /scan
+- Returning users → normal home page
+
+### Adding new CSS classes
+Always add to `globals.css`, in the relevant section before the `/* ── Scrollbar */` comment.
+Follow the existing naming: `.component-name`, `.component-name--modifier`.
+
+### Mobile responsive
+- ≤1024px: sidebar collapses to icon-only (64px)
+- ≤640px: sidebar hidden, bottom nav shown (`BottomNav.tsx`)
+- Add mobile overrides in the `@media (max-width: 640px)` block at the bottom of globals.css
+
+---
+
+## Legacy: Streamlit UI Patterns
+
+### App Structure
 Multipage Streamlit app. Entry point is app.py.
 
 ```

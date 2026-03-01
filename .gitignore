@@ -1,15 +1,45 @@
-# Environment variables
+# ── Secrets — NEVER commit ──────────────────────────────────────────────────
 .env
 .env.txt
+.env.local
+*.env
 
-# User runtime data — ignored so personal data is never committed
+# Supabase Edge Function local dev secrets
+supabase/functions/.env
+
+# ── Supabase CLI internals ───────────────────────────────────────────────────
+supabase/.temp/
+
+# ── User runtime data (personal data must not be committed) ─────────────────
 data/user_id.txt
 data/profiles/local.json
 data/history/local.json
 
-# Python
+# ── Python (legacy Streamlit app) ───────────────────────────────────────────
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# ── Node / Next.js (frontend/) ──────────────────────────────────────────────
+# (frontend/.gitignore handles these when frontend/ is tracked,
+#  but listed here as root-level belt-and-suspenders)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.vercel/
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
+
+# ── OS / editor ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.pem
+.idea/
+.vscode/settings.json

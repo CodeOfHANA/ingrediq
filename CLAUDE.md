@@ -11,20 +11,30 @@ A personal ingredient intelligence platform that cross-references product ingred
 
 ---
 
-## Commands
+## Active App: Next.js Frontend
+
+The active, deployed app lives in `frontend/`. The Streamlit app at the root is legacy.
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Install
+cd frontend && npm install
 
-# Run the app
-streamlit run app.py
+# Run dev server (localhost:3000)
+npm run dev
 
-# Run with explicit Python version
-python -m streamlit run app.py
+# Type-check (note: pre-existing TS errors in barcode/decode/route.ts are known — ignore them)
+npx tsc --noEmit
 ```
 
-> **First-time setup:** Copy `.env.txt` to `.env` and fill in all keys before running.
+---
+
+## Deploy Edge Function
+
+```bash
+# From repo root — requires SUPABASE_ACCESS_TOKEN in .env
+SUPABASE_ACCESS_TOKEN=$(grep -oP '(?<=SUPABASE_ACCESS_TOKEN=).*' .env | tr -d '\r') \
+  npx supabase functions deploy analyze-ingredients --project-ref agomwlvmhstadcpldwbm
+```
 
 ---
 
@@ -32,167 +42,166 @@ python -m streamlit run app.py
 
 | Layer | Technology |
 |---|---|
-| Frontend | Streamlit (multipage) |
-| Primary LLM | Groq — `llama-3.3-70b-versatile` |
-| Utility LLM | Groq — `llama-3.1-8b-instant` |
-| OCR | Tesseract via `pytesseract` |
-| Barcode decode | `pyzbar` + OpenCV |
-| Barcode data | Open Food Facts API (free, no key) |
-| Database | Supabase (Frankfurt region) |
-| Local fallback | JSON files in `data/` |
-| Language | Python 3.11+ / Windows |
+| Framework | Next.js 16 (App Router, Turbopack) |
+| Styling | Custom CSS (`globals.css`) — no component library |
+| LLM | Groq `llama-3.3-70b-versatile` via Supabase Edge Function (Deno) |
+| OCR | `tesseract.js` (browser WASM — no server binary needed) |
+| Barcode decode | `@undecaf/zbar-wasm` (server-side API route) |
+| Barcode data | Open Food Facts API |
+| Database | Supabase (Frankfurt) — profiles, scan_history, products_cache |
+| Security | `server-only` package prevents service key leaking to browser bundle |
 
 ---
 
-## Architecture
-
-All three input modes (barcode → Open Food Facts, photo → OCR, manual text) converge to an identical **Output Contract** before any LLM call:
-
-```python
-{
-    "ingredients_text": str,   # clean, comma-separated
-    "product_name": str | None,
-    "source": "barcode" | "ocr" | "manual",
-    "confidence": "HIGH" | "MEDIUM" | "LOW"
-}
-```
-
-The Output Contract is passed to Groq (`llama-3.3-70b-versatile`) along with the user's full profile JSON in the system prompt. The LLM returns a structured verdict JSON — never free text.
-
-Results are saved to **Supabase first, local JSON fallback second**. The app must never crash on API failure.
-
----
-
-## Project Structure
+## Frontend Architecture
 
 ```
-ingrediq/
-├── app.py                  # Streamlit entry point + home page
-├── pages/
-│   ├── 1_Profile.py        # Profile setup + preset selection
-│   ├── 2_Scan.py           # Barcode + OCR + manual scanning + verdict display
-│   └── 3_History.py        # Past scan history
-├── core/
-│   ├── analyzer.py         # Groq LLM calls + verdict logic
-│   ├── ocr.py              # Tesseract OCR + image preprocessing
-│   ├── barcode.py          # pyzbar decode + Open Food Facts API
-│   ├── presets.py          # PRESET_PROFILES and MEDICAL_PRESETS dicts
-│   └── supabase_client.py  # All Supabase DB operations + local fallbacks
-├── data/
-│   ├── user_id.txt         # Auto-generated UUID (no auth system)
-│   ├── profiles/local.json # Local profile fallback
-│   └── history/local.json  # Local scan history fallback
-├── skills/                 # Detailed implementation reference files
-└── assets/logo.png
+frontend/
+├── app/
+│   ├── page.tsx                    # Home — onboarding wizard (new users) or normal home
+│   ├── layout.tsx                  # App shell: Sidebar + BottomNav + main content
+│   ├── globals.css                 # ALL styles — design tokens, components, responsive
+│   ├── scan/page.tsx               # 3-tab scanning + confidence badge + chat follow-up
+│   ├── profile/page.tsx            # Profile editor (presets, medical, allergies, labs)
+│   ├── history/page.tsx            # Last 50 scans with stats
+│   └── api/
+│       ├── analyze/route.ts        # Proxy → Supabase Edge Function (analysis)
+│       ├── chat/route.ts           # Proxy → Supabase Edge Function (chat mode)
+│       ├── profile/route.ts        # Supabase profiles CRUD
+│       ├── history/route.ts        # Supabase scan_history CRUD
+│       └── barcode/
+│           ├── decode/route.ts     # ZBar WASM barcode decode from image
+│           └── lookup/route.ts     # Open Food Facts product lookup
+├── components/
+│   ├── Sidebar.tsx                 # Self-fetches profile; re-fetches on every pathname change
+│   ├── BottomNav.tsx               # Mobile bottom navigation
+│   ├── VerdictCard.tsx             # Verdict + confidence badge + share button
+│   ├── FlagList.tsx                # Expandable ingredient flags
+│   └── PresetGrid.tsx              # Dietary preset toggle grid
+├── lib/
+│   ├── types.ts                    # All shared TypeScript types
+│   ├── presets.ts                  # PRESET_PROFILES + MEDICAL_PRESETS
+│   ├── supabase/server.ts          # getServerSupabase() — import 'server-only' guard
+│   └── supabase/client.ts          # getBrowserSupabase() — anon key, browser-safe
+└── supabase/
+    └── functions/analyze-ingredients/
+        └── index.ts                # Groq LLM analysis + chat mode (Deno runtime)
 ```
 
 ---
 
-## Key Design Principles
+## Key Architecture Patterns
 
-1. All three input paths produce **identical Output Contract** before the LLM call
-2. LLM always returns **structured JSON** — parse defensively, never assume perfect output
-3. User profile always passed as **JSON in the Groq system prompt**
-4. **Supabase is primary** — local JSON (`data/`) is always the fallback
-5. **Never crash on API failure** — degrade gracefully, show user-friendly messages
-6. **Never diagnose** — always frame findings as "conflicts with your profile"
-7. Always show the **medical disclaimer** at the bottom of results
-8. **Demo must work offline** — local fallback must cover this
-9. Temperature **0.1** for ingredient analysis, **0.0** for OCR cleanup
+### Security boundary
+`lib/supabase/server.ts` uses `import 'server-only'` — the build will fail if the service key is ever accidentally imported client-side. Never use `getServerSupabase()` in components or `'use client'` files.
+
+### Stale data prevention
+Every API route returns `Cache-Control: no-store`. Every fetch call uses `cache: 'no-store'`. This is how profile/scan results stay fresh across navigation.
+
+### Confidence tracking
+Each scan source sets a confidence level that flows through to the verdict card:
+- Barcode lookup (Open Food Facts hit) → `HIGH`
+- Photo OCR → `MEDIUM`
+- Manual text entry → `LOW`
+
+### Auto-OCR fallback
+When Open Food Facts returns 404 for a barcode, the scan page shows an inline banner with a "📸 Use Photo OCR →" button instead of a generic error. Users are never left at a dead end.
+
+### AI chat follow-up
+After a verdict, users can ask follow-up questions (max 8 turns). The edge function supports `mode: 'chat'` which uses the same Groq model at temperature 0.3 with a conversational system prompt.
 
 ---
 
-## Environment Variables
+## Edge Function: analyze-ingredients
 
-```bash
-GROQ_API_KEY=
+`supabase/functions/analyze-ingredients/index.ts` (Deno runtime)
 
-SUPABASE_URL=https://agomwlvmhstadcpldwbm.supabase.co
-SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_KEY=
-SUPABASE_DB_PASSWORD=
+Supports two modes in the POST body:
 
-TESSERACT_PATH=C:\Program Files\Tesseract-OCR\tesseract.exe
+**Analysis mode** (default):
+```json
+{ "ingredientsText": "...", "profile": { ... } }
+```
+Returns structured `ScanResult` JSON.
 
-APP_ENV=development
+**Chat mode**:
+```json
+{ "mode": "chat", "messages": [...], "ingredientsText": "...", "profile": { ... } }
+```
+Returns `{ "reply": "..." }`.
+
+The system prompt includes:
+- Medication-food interaction rules (Warfarin, MAOIs, Statins, Metformin, ACE inhibitors, SSRIs)
+- Lab-value-aware severity upgrading (blood sugar, cholesterol, sodium, creatinine, potassium)
+- Preset dietary/religious rules (most restrictive wins)
+
+---
+
+## Frontend Environment Variables
+
+`frontend/.env.local` — never committed (covered by `.gitignore`):
+```
+NEXT_PUBLIC_SUPABASE_URL=https://agomwlvmhstadcpldwbm.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_KEY=...          # Server-only — no NEXT_PUBLIC_ prefix
+```
+
+Root `.env` — never committed:
+```
+SUPABASE_ACCESS_TOKEN=...         # Used only for npx supabase CLI commands
+GROQ_API_KEY=...                  # Stored in Supabase Vault, NOT in any file
 ```
 
 ---
 
-## Supabase Tables
+## Supabase
 
-| Table | Purpose | PK |
-|---|---|---|
-| `profiles` | User health profiles (no auth — identified by `user_id` UUID) | `user_id` text unique |
-| `scan_history` | Every scan result with full LLM response | `id` uuid |
-| `products_cache` | Open Food Facts results cached by barcode | `barcode` text |
-
----
-
-## Preset System
-
-Multiple presets can be active simultaneously. **Most restrictive rule always wins.**
-
-- **Religious:** `halal`, `kosher`, `jain`, `hindu_vegetarian`, `buddhist_strict`
-- **Dietary:** `vegan`, `vegetarian`, `pescatarian`, `keto`, `gluten_free`, `dairy_free`, `low_fodmap`
-- **Medical:** `diabetes`, `hypertension`, `kidney_disease`
-
-Full rulesets with all excluded ingredients and E-numbers are in `skills/SKILL_PROFILES.md` and implemented in `core/presets.py`.
-
----
-
-## UI Color System
-
-```python
-COLOR = {
-    "safe":    "#059669",  # SAFE verdict
-    "caution": "#d97706",  # CAUTION verdict
-    "avoid":   "#dc2626",  # AVOID verdict
-    "primary": "#4f46e5",  # Indigo accent
-    "bg_light":"#f0f0ff",  # Card backgrounds
-}
-```
+- Project ref: `agomwlvmhstadcpldwbm`
+- Region: Frankfurt
+- Tables: `profiles`, `scan_history`, `products_cache`
+- `GROQ_API_KEY` is stored in Supabase Vault secrets — **never in any file**
 
 ---
 
 ## Plan & Review Workflow
 
 ### Before Starting Any Work
-1. Enter plan mode and write the plan to `.claude/tasks/TASK_NAME.md`
-2. The plan must include: implementation steps with reasoning, tasks broken into small units, any new packages or APIs needed
+1. Enter plan mode and write the plan to `.claude/plans/TASK_NAME.md`
+2. Include: implementation steps, files to change, any new packages
 3. Think MVP — do not over-engineer
 4. **Wait for explicit approval before writing a single line of code**
 
-### While Implementing
-- Update the plan file as you go
-- After each completed step, append to **Implementation Notes** in the task file:
-  - What was built, files created/modified, decisions made, any deviations and why
-
 ### Task File Format
 ```
-.claude/tasks/TASK_NAME.md
-
 ## Goal
 ## Plan
 ## Status
 - [ ] Step 1
 - [x] Step 2 — completed
 ## Implementation Notes
-### Step 2 — completed YYYY-MM-DD
-What was built, files changed, decisions made
 ```
 
 ---
 
 ## SKILL Files Reference
 
-Always read the relevant file in `skills/` before coding any module:
-
 | Task | Read First |
 |---|---|
-| Any LLM / Groq code | `skills/SKILL_LLM.md` |
+| LLM / Groq / Edge Function code | `skills/SKILL_LLM.md` |
 | Profile or preset code | `skills/SKILL_PROFILES.md` |
 | OCR or barcode code | `skills/SKILL_SCANNING.md` |
-| Any UI / Streamlit code | `skills/SKILL_UI.md` |
-| Any database code | `skills/SKILL_SUPABASE.md` |
+| UI / CSS / Next.js components | `skills/SKILL_UI.md` |
+| Supabase / API routes | `skills/SKILL_SUPABASE.md` |
 | Starting a new module | `skills/SKILL.md` |
+
+---
+
+## Legacy: Streamlit App (root level)
+
+The original Python/Streamlit app is still present at the repo root (`app.py`, `pages/`, `core/`).
+It is **not the active app** — do not modify it unless explicitly asked.
+
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```

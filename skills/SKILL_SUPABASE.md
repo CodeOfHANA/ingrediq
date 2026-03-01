@@ -4,6 +4,60 @@
 - Project name: ingrediq
 - Region: Frankfurt (eu-central-1)
 - URL: https://agomwlvmhstadcpldwbm.supabase.co
+- Project ref: agomwlvmhstadcpldwbm
+
+---
+
+## Next.js Patterns (Active App)
+
+### Client split — CRITICAL
+```typescript
+// lib/supabase/server.ts — server-only, uses service key
+import 'server-only'
+import { createClient } from '@supabase/supabase-js'
+export function getServerSupabase() {
+    return createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_KEY!   // no NEXT_PUBLIC_ prefix — never reaches browser
+    )
+}
+
+// lib/supabase/client.ts — browser-safe, uses anon key
+import { createClient } from '@supabase/supabase-js'
+export function getBrowserSupabase() {
+    return createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+}
+```
+
+### API Route pattern
+```typescript
+// All API routes must:
+// 1. Use getServerSupabase() — never inline createClient with service key
+// 2. Return Cache-Control: no-store on ALL response paths (including errors)
+import { getServerSupabase } from '@/lib/supabase/server'
+
+export async function GET(req: NextRequest) {
+    const sb = getServerSupabase()
+    const noStore = { headers: { 'Cache-Control': 'no-store' } }
+    const { data, error } = await sb.from('profiles').select('*').eq('user_id', userId).single()
+    if (error) return NextResponse.json(null, noStore)
+    return NextResponse.json(data, noStore)
+}
+```
+
+### Calling Edge Functions from API routes
+```typescript
+const { data, error } = await getServerSupabase().functions.invoke('analyze-ingredients', {
+    body: { ingredientsText, profile }
+})
+```
+
+---
+
+## Python Patterns (Legacy Streamlit App)
 
 ## Environment Variables
 ```
