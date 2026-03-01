@@ -40,29 +40,35 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-        // Check if profile already exists
-        const { data: existing } = await sb
+        // Strategy: try UPDATE first. If it matches 0 rows, INSERT.
+        // This avoids the 23505 race condition entirely.
+        const { data: updated, error: updateErr } = await sb
             .from('profiles')
-            .select('user_id')
+            .update(row)
             .eq('user_id', profile.user_id)
-            .maybeSingle()
+            .select('user_id')
 
-        let error
-        if (existing) {
-            // UPDATE existing row
-            ; ({ error } = await sb
-                .from('profiles')
-                .update(row)
-                .eq('user_id', profile.user_id))
-        } else {
-            // INSERT new row
-            ; ({ error } = await sb
-                .from('profiles')
-                .insert({ user_id: profile.user_id, ...row }))
+        console.log('[profile] UPDATE result:', { updated, updateErr })
+
+        if (updateErr) {
+            // UPDATE itself errored — throw
+            throw updateErr
         }
 
-        if (error) throw error
+        if (updated && updated.length > 0) {
+            // Row existed and was updated
+            return NextResponse.json({ ok: true })
+        }
+
+        // No row existed — INSERT
+        console.log('[profile] No existing row, inserting for:', profile.user_id)
+        const { error: insertErr } = await sb
+            .from('profiles')
+            .insert({ user_id: profile.user_id, ...row })
+
+        if (insertErr) throw insertErr
         return NextResponse.json({ ok: true })
+
     } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : JSON.stringify(e)
         console.error('Profile POST error:', msg)
