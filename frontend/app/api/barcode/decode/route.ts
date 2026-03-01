@@ -17,10 +17,13 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Image too large. Please use a photo under 10 MB.' }, { status: 413 })
         }
 
-        // Only accept image MIME types
-        const VALID_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp']
-        if (!VALID_TYPES.includes(file.type)) {
-            return NextResponse.json({ error: 'Unsupported file type. Use JPG, PNG, or WEBP.' }, { status: 415 })
+        // Only accept image MIME types (including HEIC/HEIF from Samsung/iPhone)
+        const VALID_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'image/heic', 'image/heif']
+        // Some mobile browsers send HEIC with empty or generic MIME — allow if extension matches
+        const ext = file.name?.toLowerCase().split('.').pop() ?? ''
+        const heicByExt = ['heic', 'heif'].includes(ext)
+        if (!VALID_TYPES.includes(file.type) && !heicByExt && file.type !== '') {
+            return NextResponse.json({ error: 'Unsupported file type. Use JPG, PNG, WEBP, or HEIC.' }, { status: 415 })
         }
 
         // Read file bytes robustly

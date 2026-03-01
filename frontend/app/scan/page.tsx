@@ -40,9 +40,11 @@ export default function ScanPage() {
     const [chatLoading, setChatLoading] = useState(false)
     const chatEndRef = useRef<HTMLDivElement>(null)
 
-    // Separate file inputs
+    // Separate file inputs: camera + gallery for each tab
     const ocrFileRef = useRef<HTMLInputElement>(null)
+    const ocrCameraRef = useRef<HTMLInputElement>(null)
     const barcodeFileRef = useRef<HTMLInputElement>(null)
+    const barcodeCameraRef = useRef<HTMLInputElement>(null)
 
     useEffect(() => {
         const userId = getUserId()
@@ -214,7 +216,9 @@ export default function ScanPage() {
         setBarcodeNotFound(false); setConfidence('LOW')
         setChatMessages([]); setChatOpen(false); setChatInput('')
         if (ocrFileRef.current) ocrFileRef.current.value = ''
+        if (ocrCameraRef.current) ocrCameraRef.current.value = ''
         if (barcodeFileRef.current) barcodeFileRef.current.value = ''
+        if (barcodeCameraRef.current) barcodeCameraRef.current.value = ''
     }
 
     /* ── Profile guard ── */
@@ -355,22 +359,39 @@ export default function ScanPage() {
                 <div className="form-section">
                     <label className="form-label">Upload Barcode Photo</label>
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 8px' }}>
-                        Upload an image of the product barcode. We&apos;ll auto-detect the number and look it up.
+                        Take a photo of the barcode or choose one from your gallery.
                     </p>
 
-                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                        <label
+                            htmlFor="barcode-camera-input"
+                            className="btn"
+                            style={{ cursor: 'pointer' }}
+                        >
+                            {decodingBarcode ? '🔍 Reading…' : '📷 Take Photo'}
+                        </label>
+                        <input
+                            id="barcode-camera-input"
+                            ref={barcodeCameraRef}
+                            type="file"
+                            accept="image/*, .heic, .heif"
+                            capture="environment"
+                            style={{ display: 'none' }}
+                            onChange={e => e.target.files?.[0] && handleBarcodePhoto(e.target.files[0])}
+                            disabled={decodingBarcode || fetchingBarcode}
+                        />
                         <label
                             htmlFor="barcode-file-input"
                             className="btn"
                             style={{ cursor: 'pointer' }}
                         >
-                            {decodingBarcode ? '🔍 Reading barcode…' : '🏷️ Upload Barcode Image'}
+                            {decodingBarcode ? '🔍 Reading…' : '📁 Choose from Gallery'}
                         </label>
                         <input
                             id="barcode-file-input"
                             ref={barcodeFileRef}
                             type="file"
-                            accept="image/*"
+                            accept="image/*, .heic, .heif"
                             style={{ display: 'none' }}
                             onChange={e => e.target.files?.[0] && handleBarcodePhoto(e.target.files[0])}
                             disabled={decodingBarcode || fetchingBarcode}
@@ -441,19 +462,19 @@ export default function ScanPage() {
                             Extracting text from image… this may take 10–30 seconds.
                         </div>
                     ) : (
-                        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '1rem' }}>
+                        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap' }}>
                             <label
-                                htmlFor="ocr-file-input"
+                                htmlFor="ocr-camera-input"
                                 className="btn"
                                 style={{ cursor: 'pointer' }}
                             >
-                                📸 Choose Ingredient Label Photo
+                                📷 Take Photo
                             </label>
                             <input
-                                id="ocr-file-input"
-                                ref={ocrFileRef}
+                                id="ocr-camera-input"
+                                ref={ocrCameraRef}
                                 type="file"
-                                accept="image/*"
+                                accept="image/*, .heic, .heif"
                                 capture="environment"
                                 style={{ display: 'none' }}
                                 onChange={e => {
@@ -463,7 +484,27 @@ export default function ScanPage() {
                                     }
                                 }}
                             />
-                            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>JPG, PNG, WEBP accepted</span>
+                            <label
+                                htmlFor="ocr-file-input"
+                                className="btn"
+                                style={{ cursor: 'pointer' }}
+                            >
+                                📁 Choose from Gallery
+                            </label>
+                            <input
+                                id="ocr-file-input"
+                                ref={ocrFileRef}
+                                type="file"
+                                accept="image/*, .heic, .heif"
+                                style={{ display: 'none' }}
+                                onChange={e => {
+                                    if (e.target.files?.[0]) {
+                                        setText('')
+                                        handleOcr(e.target.files[0])
+                                    }
+                                }}
+                            />
+                            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>JPG, PNG, WEBP, HEIC accepted</span>
                         </div>
                     )}
 
