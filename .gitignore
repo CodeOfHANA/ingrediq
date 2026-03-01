@@ -37,6 +37,10 @@ frontend/.vercel/
 frontend/*.tsbuildinfo
 frontend/next-env.d.ts
 
+# ── AI / internal docs (local only) ─────────────────────────────────────────
+CLAUDE.md
+skills/
+
 # ── OS / editor ─────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
