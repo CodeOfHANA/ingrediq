@@ -6,8 +6,22 @@ export async function GET(req: NextRequest) {
     const userId = req.nextUrl.searchParams.get('userId')
     if (!userId) return NextResponse.json([], { status: 400 })
 
+    const id = req.nextUrl.searchParams.get('id')
     const sb = getServerSupabase()
+    const noStore = { headers: { 'Cache-Control': 'no-store' } }
+
     try {
+        if (id) {
+            const { data, error } = await sb
+                .from('scan_history')
+                .select('*')
+                .eq('user_id', userId)
+                .eq('id', id)
+                .single()
+            if (error) return NextResponse.json({ error: 'Not found' }, { status: 404, headers: noStore.headers })
+            return NextResponse.json(data, noStore)
+        }
+
         const { data, error } = await sb
             .from('scan_history')
             .select('*')
@@ -15,12 +29,11 @@ export async function GET(req: NextRequest) {
             .order('scanned_at', { ascending: false })
             .limit(50)
 
-        const noStore = { headers: { 'Cache-Control': 'no-store' } }
         if (error) throw error
         return NextResponse.json(data ?? [], noStore)
     } catch (e) {
         console.error('History GET error:', e)
-        return NextResponse.json([], { headers: { 'Cache-Control': 'no-store' } })
+        return NextResponse.json([], noStore)
     }
 }
 

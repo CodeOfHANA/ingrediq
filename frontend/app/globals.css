@@ -757,6 +757,11 @@ body {
   border-bottom: none;
 }
 
+a:has(.history-row):hover .history-row {
+  background: var(--surface-hover, rgba(0,0,0,0.04));
+  cursor: pointer;
+}
+
 .history-product {
   font-weight: 700;
   font-size: 0.9rem;
