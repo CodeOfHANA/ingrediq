@@ -7,6 +7,9 @@ export async function GET(req: NextRequest) {
     if (!code) {
         return NextResponse.json({ error: 'code parameter required' }, { status: 400 })
     }
+    if (!/^[0-9]{6,14}$/.test(code)) {
+        return NextResponse.json({ error: 'Invalid barcode format' }, { status: 400 })
+    }
 
     try {
         const res = await fetch(`${OPEN_FOOD_FACTS_URL}/${code}.json`, {
