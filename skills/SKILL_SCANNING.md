@@ -16,7 +16,9 @@ Server-side API route at `/api/barcode/decode/route.ts`.
 - Uses `sharp` for image preprocessing (RGBA extraction, grayscale fallback)
 - Uses `@undecaf/zbar-wasm` — WebAssembly port of the same zbar C library that Python's pyzbar uses
 - **WASM path fix**: Must resolve `zbar.wasm` with `process.cwd()` because Next.js API routes change the working directory
-- File size guard: max 10 MB, only image/* MIME types accepted
+- File size guard: max 10 MB
+- **Accepted formats**: image/jpeg, image/png, image/webp, image/gif, image/bmp, **image/heic, image/heif** + extension-based fallback for mobile browsers that send empty MIME types
+- **Mobile UX**: Two separate file inputs per tab — "📷 Take Photo" (with `capture="environment"` for direct camera access) and "📁 Choose from Gallery" (without `capture`, opens file picker)
 
 ### OCR: `tesseract.js`
 Runs **client-side in the browser** (WASM) — no server binary needed.

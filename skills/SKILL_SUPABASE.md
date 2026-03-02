@@ -48,23 +48,60 @@ export async function GET(req: NextRequest) {
 }
 ```
 
-### Upsert pattern — CRITICAL: always use onConflict
+### Profile save — insert-catch-then-update (CRITICAL)
 ```typescript
-// ⚠️ Without { onConflict: 'user_id' }, the SECOND save will fail
-// because Supabase tries INSERT instead of UPDATE.
-const { error } = await sb.from('profiles').upsert({
-    user_id: profile.user_id,
-    name: profile.name,
-    // ... other fields
-    updated_at: new Date().toISOString(),
-}, { onConflict: 'user_id' })   // ← REQUIRED for subsequent saves
+// ⚠️ Supabase upsert with onConflict does NOT reliably work with RLS.
+// Use this pattern instead: try INSERT first, catch 23505 (duplicate),
+// then fall back to UPDATE. This is immune to RLS blocking reads.
+
+// Step 1: Try UPDATE first
+const { error: updateErr } = await sb
+    .from('profiles')
+    .update(row)
+    .eq('user_id', profile.user_id)
+
+// Step 2: Check if row exists (SELECT)
+const { data: check } = await sb
+    .from('profiles')
+    .select('user_id')
+    .eq('user_id', profile.user_id)
+    .maybeSingle()
+
+if (check) return NextResponse.json({ ok: true })  // UPDATE worked
+
+// Step 3: Row doesn't exist — INSERT
+const { error: insertErr } = await sb
+    .from('profiles')
+    .insert({ user_id: profile.user_id, ...row })
+
+if (insertErr) {
+    // 23505 race condition — retry UPDATE
+    const { error: retryErr } = await sb
+        .from('profiles')
+        .update(row)
+        .eq('user_id', profile.user_id)
+    if (retryErr) return NextResponse.json({ error: retryErr.message }, { status: 500 })
+}
+return NextResponse.json({ ok: true })
+```
+
+### Server Supabase client — bypass RLS
+```typescript
+// lib/supabase/server.ts — must include auth options to bypass RLS
+export function getServerSupabase() {
+    return createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_KEY!,
+        { auth: { autoRefreshToken: false, persistSession: false } }
+    )
+}
 ```
 
 ### Loading profile — strip database-only columns
 ```typescript
 // When loading profile data, always strip database columns
 // before storing in component state. Otherwise `id` leaks into
-// the POST payload and can cause upsert conflicts.
+// the POST payload and can cause conflicts.
 const { user_id: _, id: _id, created_at: __, updated_at: ___, ...rest } = data
 setForm(rest)
 ```
