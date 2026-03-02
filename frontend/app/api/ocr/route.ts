@@ -84,8 +84,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ text: extracted })
     } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Unknown error'
-        console.error('[ocr:POST] error:', msg)
-        return NextResponse.json({ error: `OCR failed: ${msg}` }, { status: 500 })
+        console.error('[ocr:POST] error:', err instanceof Error ? err.message : String(err))
+        return NextResponse.json({ error: 'OCR service temporarily unavailable. Please try Manual Input.' }, { status: 500 })
     }
 }
