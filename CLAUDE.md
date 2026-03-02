@@ -45,7 +45,7 @@ SUPABASE_ACCESS_TOKEN=$(grep -oP '(?<=SUPABASE_ACCESS_TOKEN=).*' .env | tr -d '\
 | Framework | Next.js 16 (App Router, Turbopack) |
 | Styling | Custom CSS (`globals.css`) — no component library |
 | LLM | Groq `llama-3.3-70b-versatile` via Supabase Edge Function (Deno) |
-| OCR | `tesseract.js` (browser WASM — no server binary needed) |
+| OCR | Groq Vision API (`llama-4-scout-17b`) via `/api/ocr` — server-side (replaced `tesseract.js` which fails on Vercel serverless) |
 | Barcode decode | `@undecaf/zbar-wasm` (server-side API route, HEIC/HEIF supported) |
 | Barcode data | Open Food Facts API |
 | Database | Supabase (Frankfurt) — profiles, scan_history, products_cache |
@@ -69,6 +69,7 @@ frontend/
 │       ├── chat/route.ts           # Proxy → Supabase Edge Function (chat mode)
 │       ├── profile/route.ts        # Supabase profiles CRUD
 │       ├── history/route.ts        # Supabase scan_history CRUD
+│       ├── ocr/route.ts            # Groq Vision OCR: sharp preprocess → base64 → Groq llama-4-scout
 │       └── barcode/
 │           ├── decode/route.ts     # ZBar WASM barcode decode from image
 │           └── lookup/route.ts     # Open Food Facts product lookup
@@ -155,8 +156,12 @@ SUPABASE_SERVICE_KEY=...          # Server-only — no NEXT_PUBLIC_ prefix
 Root `.env` — never committed:
 ```
 SUPABASE_ACCESS_TOKEN=...         # Used only for npx supabase CLI commands
-GROQ_API_KEY=...                  # Stored in Supabase Vault, NOT in any file
 ```
+
+> **GROQ_API_KEY** is needed in two places:
+> - `frontend/.env.local` → used by the Next.js `/api/ocr` route (Node.js runtime, Vercel env var in prod)
+> - Supabase Vault secrets → used by the Deno edge function `analyze-ingredients`
+> It is never committed to git in any file.
 
 ---
 

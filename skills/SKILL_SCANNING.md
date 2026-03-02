@@ -8,7 +8,7 @@ The active scanning implementation lives in `frontend/app/scan/page.tsx` with se
 | Source | Confidence | Rationale |
 |---|---|---|
 | Barcode lookup (Open Food Facts hit) | `HIGH` | Structured database data |
-| Photo OCR (tesseract.js) | `MEDIUM` | Machine-read, some noise |
+| Photo OCR (Groq Vision API) | `MEDIUM` | AI-read, very accurate but still a photo |
 | Manual text entry | `LOW` | User-typed, could be incomplete |
 
 ### Barcode decode: `@undecaf/zbar-wasm`
@@ -20,21 +20,88 @@ Server-side API route at `/api/barcode/decode/route.ts`.
 - **Accepted formats**: image/jpeg, image/png, image/webp, image/gif, image/bmp, **image/heic, image/heif** + extension-based fallback for mobile browsers that send empty MIME types
 - **Mobile UX**: Two separate file inputs per tab — "📷 Take Photo" (with `capture="environment"` for direct camera access) and "📁 Choose from Gallery" (without `capture`, opens file picker)
 
-### OCR: `tesseract.js`
-Runs **client-side in the browser** (WASM) — no server binary needed.
-- Dynamically imported: `const { createWorker } = await import('tesseract.js')`
-- Language: `eng`
-- Empty/whitespace OCR results are rejected with a user-friendly message
+### OCR: Groq Vision API (`meta-llama/llama-4-scout-17b-16e-instruct`)
+Server-side API route at `/api/ocr/route.ts` (Node.js runtime on Vercel).
+
+**Why not tesseract.js?**
+- `tesseract.js` uses worker threads that resolve file paths from `node_modules` — these paths don't exist in Vercel's `/ROOT/` serverless filesystem.
+- Groq Vision API runs over HTTP — no filesystem dependencies, works anywhere.
+- Quality is significantly better than Tesseract for real-world product label photos.
+
+**Pipeline:**
+1. Client detects HEIC/HEIF by MIME type or file extension
+2. If HEIC → convert to JPEG client-side using `heic2any` (browser lib, dynamic import)
+3. Upload JPEG/PNG to `/api/ocr` as `multipart/form-data`
+4. Server uses `sharp` to: auto-rotate (EXIF), resize to max 1600px, normalize to JPEG
+5. Preprocessed image sent as `base64` to Groq Vision API
+6. LLM extracts ingredient text, returns raw text
+7. Text populated into the ingredients field for analysis
+
+**Key env var:** `GROQ_API_KEY` must exist in `frontend/.env.local` AND as a Vercel environment variable.
+
+**heic2any**: `npm install heic2any` — dynamically imported in browser only. Not used server-side.
 
 ### Auto-OCR fallback
 When Open Food Facts returns 404 for a barcode, the scan page shows a `barcodeNotFound` banner with a "📸 Use Photo OCR →" button. Users are never left at a dead end.
 
 ---
 
-## Legacy: Python/Streamlit Patterns
+## Output Contract (TypeScript — Next.js)
 
-## Output Contract
-All three input modes MUST return this identical structure before LLM call:
+All three input modes produce this structure before the LLM analysis call:
+```typescript
+{
+  ingredientsText: string    // clean ingredient list
+  productName?: string       // from barcode lookup or OCR; omit for manual
+  source: 'barcode' | 'ocr' | 'manual'
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW'
+}
+```
+Never pass raw unprocessed text directly to the LLM.
+
+---
+
+## Mode 3: Manual Text Input (Next.js)
+
+No API call needed. Client-side only:
+- Strip leading/trailing whitespace
+- Normalise line-breaks → commas
+- Set `confidence: 'LOW'`
+
+---
+
+## Error Handling (Next.js)
+
+| Scenario | HTTP | User-facing action |
+|---|---|---|
+| No image in form data | 400 | Show inline error |
+| Image > 10 MB | 413 | "Please use a photo under 10 MB" |
+| `GROQ_API_KEY` missing | 500 | "OCR service not configured" |
+| Groq API error | 502 | "OCR service temporarily unavailable. Please try Manual Input." |
+| No text found in image | 422 | "No ingredient text found. Try a clearer photo." |
+| Barcode 404 (Open Food Facts) | — | Show auto-OCR fallback banner with "📸 Use Photo OCR →" button |
+
+---
+
+## Environment Variables for OCR (Next.js)
+
+`GROQ_API_KEY` must be available in **two separate places**:
+1. `frontend/.env.local` — for local development (`process.env.GROQ_API_KEY` in the Node.js OCR route)
+2. Vercel environment variables — for production deployment
+3. Supabase Vault secrets — for the Deno edge function (`analyze-ingredients`), separate from above
+
+Never commit `GROQ_API_KEY` to git in any file.
+
+---
+
+## Legacy: Python/Streamlit Patterns (Reference Only)
+
+> **IMPORTANT:** The patterns below describe the **legacy Streamlit app** (repo root `app.py`).
+> The **active Next.js app** uses **Groq Vision API** for OCR — `tesseract.js` / `pytesseract` are
+> NOT used and must NOT be added to the Next.js app.
+> Tesseract was replaced because its worker thread path resolution fails on Vercel serverless.
+
+### Legacy Output Contract (Python)
 ```python
 {
     "ingredients_text": "string — clean comma separated ingredient list",
@@ -43,195 +110,41 @@ All three input modes MUST return this identical structure before LLM call:
     "confidence": "HIGH" | "MEDIUM" | "LOW"
 }
 ```
-Never pass raw unprocessed text to the LLM analyzer.
 
----
-
-## Mode 1: Barcode Scanning
-
-### Flow
-1. User uploads image containing barcode OR uses camera input
-2. pyzbar decodes barcode number from image
-3. Check Supabase products_cache first — if hit, return cached ingredients
-4. If cache miss → call Open Food Facts API
-5. Extract ingredients_text from response
-6. Cache result in Supabase products_cache
-7. Return output contract dict
-
-### Barcode Decoding
+### Legacy Mode 1: Barcode (pyzbar + Open Food Facts)
 ```python
-import cv2
 from pyzbar.pyzbar import decode
 from PIL import Image
-import numpy as np
+import numpy as np, cv2, requests
 
 def decode_barcode(image_file) -> str | None:
-    img = Image.open(image_file)
-    img_array = np.array(img)
-    
-    # Try color first
-    barcodes = decode(img_array)
-    
-    # If not found, try grayscale
-    if not barcodes:
-        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-        barcodes = decode(gray)
-    
-    if barcodes:
-        return barcodes[0].data.decode("utf-8")
-    return None
-```
-
-### Open Food Facts API Call
-```python
-import requests
+    img_array = np.array(Image.open(image_file))
+    barcodes = decode(img_array) or decode(cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY))
+    return barcodes[0].data.decode("utf-8") if barcodes else None
 
 def fetch_from_openfoodfacts(barcode: str) -> dict | None:
-    url = f"https://world.openfoodfacts.org/api/v0/product/{barcode}.json"
-    try:
-        response = requests.get(url, timeout=5)
-        data = response.json()
-        if data.get("status") == 1:
-            product = data.get("product", {})
-            return {
-                "ingredients_text": product.get("ingredients_text", ""),
-                "product_name": product.get("product_name", None),
-                "source": "barcode",
-                "confidence": "HIGH"
-            }
-    except Exception as e:
-        print(f"Open Food Facts error: {e}")
+    data = requests.get(f"https://world.openfoodfacts.org/api/v0/product/{barcode}.json", timeout=5).json()
+    if data.get("status") == 1:
+        p = data["product"]
+        return {"ingredients_text": p.get("ingredients_text",""), "product_name": p.get("product_name"), "source":"barcode","confidence":"HIGH"}
     return None
 ```
 
-### Fallback if Barcode Not Found
-If Open Food Facts returns no result:
-- Show message: "Product not found in database"
-- Automatically switch UI to OCR or manual input mode
-- Do NOT crash or show error page
-
----
-
-## Mode 2: OCR — Photo of Ingredient Label
-
-### Flow
-1. User uploads photo of ingredient label
-2. Preprocess image (critical — never skip)
-3. Run Tesseract OCR
-4. Clean raw OCR text using Groq utility model (llama-3.1-8b-instant)
-5. Show extracted text to user for correction if confidence is LOW
-6. Return output contract dict
-
-### Tesseract Setup (Windows)
+### Legacy Mode 2: OCR (Tesseract — REPLACED by Groq Vision in Next.js)
 ```python
+# DO NOT USE in Next.js — for Streamlit legacy app only
 import pytesseract
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
 pytesseract.pytesseract.tesseract_cmd = os.getenv("TESSERACT_PATH")
 # TESSERACT_PATH=C:\Program Files\Tesseract-OCR\tesseract.exe
+
+# Preprocessing: grayscale → blur → adaptive threshold → denoise
+# Then: pytesseract.image_to_string(processed, config="--oem 3 --psm 6")
+# Multilingual: config="--oem 3 --psm 6 -l eng+deu"
 ```
 
-### Image Preprocessing — Always Apply In This Order
-```python
-import cv2
-import numpy as np
-from PIL import Image
-
-def preprocess_image(image_file) -> np.ndarray:
-    # Load image
-    img = Image.open(image_file)
-    img_array = np.array(img)
-    
-    # Step 1: Convert to grayscale
-    gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-    
-    # Step 2: Apply Gaussian blur to reduce noise
-    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-    
-    # Step 3: Apply adaptive threshold for better text extraction
-    threshold = cv2.adaptiveThreshold(
-        blurred, 255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY, 11, 2
-    )
-    
-    # Step 4: Denoise
-    denoised = cv2.fastNlMeansDenoising(threshold, h=10)
-    
-    return denoised
-```
-
-### OCR Extraction
-```python
-def extract_text_from_image(image_file) -> dict:
-    processed = preprocess_image(image_file)
-    
-    # Run Tesseract with best config for ingredient labels
-    config = "--oem 3 --psm 6"
-    raw_text = pytesseract.image_to_string(processed, config=config)
-    
-    # Get confidence data
-    data = pytesseract.image_to_data(processed, output_type=pytesseract.Output.DICT)
-    confidences = [int(c) for c in data["conf"] if c != "-1"]
-    avg_confidence = sum(confidences) / len(confidences) if confidences else 0
-    
-    confidence_level = "HIGH" if avg_confidence > 70 else "MEDIUM" if avg_confidence > 40 else "LOW"
-    
-    return {
-        "raw_text": raw_text,
-        "confidence": confidence_level,
-        "avg_confidence_score": avg_confidence
-    }
-```
-
-### OCR Text Cleanup
-After OCR extraction, always clean using Groq utility model:
-```python
-# Pass raw_text to clean_ocr_text() from SKILL_LLM.md
-# Then return cleaned text as ingredients_text in output contract
-```
-
-### Low Confidence Handling
-If confidence == "LOW":
-- Show extracted text in an editable st.text_area
-- Show message: "Label was difficult to read. Please check and correct the text below."
-- Let user edit before analysis
-- This is better than silently sending bad OCR output to LLM
-
----
-
-## Mode 3: Manual Text Input
-
-### Flow
-1. User pastes or types ingredient list into st.text_area
-2. Minimal cleanup (strip whitespace, normalize commas)
-3. Return output contract dict directly
-
+### Legacy Mode 3: Manual (Python)
 ```python
 def process_manual_input(text: str) -> dict:
     cleaned = text.strip().replace("\n", ", ").replace("  ", " ")
-    return {
-        "ingredients_text": cleaned,
-        "product_name": None,
-        "source": "manual",
-        "confidence": "HIGH"
-    }
+    return {"ingredients_text": cleaned, "product_name": None, "source": "manual", "confidence": "HIGH"}
 ```
-
----
-
-## UI Input Mode Selection
-Show three tabs or radio buttons at top of Scan page:
-```
-[ 📷 Scan Barcode ] [ 📸 Photo OCR ] [ ✍️ Manual Input ]
-```
-All three tabs lead to the same analysis function after producing the output contract.
-
-## Supported Languages for OCR
-Tesseract supports multilingual OCR. For IngredIQ add:
-- English (default)
-- German (common in Hamburg / EU products)
-- Arabic (common on Halal products)
-Add language parameter: `config = "--oem 3 --psm 6 -l eng+deu"`
