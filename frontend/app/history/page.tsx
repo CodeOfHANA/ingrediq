@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { ScanRecord, Verdict } from '@/lib/types'
 
 const USER_ID_KEY = 'ingrediq_user_id'
@@ -73,8 +74,8 @@ export default function HistoryPage() {
                         const date = new Date(rec.scanned_at).toLocaleDateString('en-GB', {
                             day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
                         })
-                        return (
-                            <div key={i} className="history-row">
+                        const row = (
+                            <div className="history-row">
                                 <div>
                                     <div className="history-product">
                                         {meta.emoji}  {rec.product_name || rec.ingredients_text.slice(0, 50) + '…'}
@@ -91,6 +92,13 @@ export default function HistoryPage() {
                                     )}
                                 </div>
                             </div>
+                        )
+                        return rec.id ? (
+                            <Link key={rec.id} href={`/history/${rec.id}`} style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
+                                {row}
+                            </Link>
+                        ) : (
+                            <div key={i}>{row}</div>
                         )
                     })}
                 </div>

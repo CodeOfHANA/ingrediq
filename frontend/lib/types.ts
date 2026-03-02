@@ -21,6 +21,7 @@ export interface ScanResult {
 }
 
 export interface ScanRecord extends ScanResult {
+  id?: string
   product_name?: string | null
   ingredients_text: string
   source: ScanSource

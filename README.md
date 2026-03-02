@@ -14,7 +14,7 @@ Built for the **100x Engineers GenAI Mini-Hackathon**.
 | Mode | How it works |
 |---|---|
 | 🏷️ **Barcode** | Upload or photograph a product barcode — we decode it and look up the ingredient list via Open Food Facts automatically |
-| 📸 **Photo OCR** | Photograph the ingredient label — text is extracted locally in the browser via Tesseract WASM (no server upload needed) |
+| 📸 **Photo OCR** | Photograph the ingredient label — image is sent to the server where Groq Vision (`llama-4-scout-17b`) extracts the text. Supports JPG, PNG, WEBP, and HEIC |
 | ✏️ **Manual** | Paste the ingredient list directly for instant analysis |
 
 ### Personalised verdict
@@ -34,7 +34,8 @@ Built for the **100x Engineers GenAI Mini-Hackathon**.
 - **Auto-OCR fallback** — if a barcode isn't in Open Food Facts, an inline banner appears with a one-click "📸 Use Photo OCR →" redirect instead of a dead end
 - **AI chat follow-up** — ask questions about the verdict after a scan (max 8 turns, collapsible)
 - **Share result** — native share sheet on mobile, clipboard copy on desktop with a toast confirmation
-- **Scan history** — last 50 scans with stats (total / safe / caution / avoid)
+- **Scan history** — last 50 scans with stats (total / safe / caution / avoid); click any row to open the full detail page
+- **History detail page** — revisit any past scan's full verdict, flags, and summary; includes an AI chat follow-up using that scan's ingredients and your current profile
 - **Progressive onboarding** — 2-step wizard for new users; returning users go straight to the home dashboard
 
 ### Responsive design
@@ -50,7 +51,7 @@ Built for the **100x Engineers GenAI Mini-Hackathon**.
 ```
 Browser (Next.js)
        │
-       ├── /scan, /profile, /history, /     ← React client components
+       ├── /scan, /profile, /history, /history/[id], /   ← React client components
        │
        └── /api/* (Next.js Route Handlers — server-side only)
                │
@@ -58,6 +59,8 @@ Browser (Next.js)
                │                                       │
                ├── /api/chat ─────────────────────────►│ Groq llama-3.3-70b-versatile
                │                                       │ GROQ_API_KEY in Supabase Vault
+               ├── /api/ocr ──────────────────► Groq Vision llama-4-scout-17b (GROQ_API_KEY in .env.local)
+               │                                sharp preprocess → base64 → Groq API
                ├── /api/profile ──────────────► Supabase DB (profiles table)
                ├── /api/history ──────────────► Supabase DB (scan_history table)
                ├── /api/barcode/decode ───────► ZBar WASM (server-side image processing)
@@ -84,7 +87,7 @@ Browser (Next.js)
 | Styling | Custom CSS with design tokens — no component library |
 | LLM | Groq `llama-3.3-70b-versatile` |
 | LLM runtime | Supabase Edge Functions (Deno) |
-| OCR | `tesseract.js` — browser WASM, works deployed with no server binary |
+| OCR | Groq Vision API `llama-4-scout-17b` — server-side via `/api/ocr`, preprocessed with `sharp` |
 | Barcode decode | `@undecaf/zbar-wasm` — server-side API route |
 | Barcode data | Open Food Facts API (free, open-source, no key required) |
 | Database | Supabase (PostgreSQL, Frankfurt region) |
@@ -115,9 +118,11 @@ Create `frontend/.env.local`:
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 SUPABASE_SERVICE_KEY=your_service_role_key
+GROQ_API_KEY=gsk_...
 ```
 
 > **Never commit `.env.local`** — it is gitignored.
+> `GROQ_API_KEY` is needed here for the server-side `/api/ocr` route (Groq Vision), **and** separately as a Supabase Vault secret for the Edge Function (LLM analysis).
 
 ### 3. Supabase database tables
 
@@ -197,13 +202,15 @@ ingrediq/
 │   │   ├── page.tsx                   # Home / onboarding wizard
 │   │   ├── scan/page.tsx              # Scan interface (3 tabs)
 │   │   ├── profile/page.tsx           # Profile editor
-│   │   ├── history/page.tsx           # Scan history
+│   │   ├── history/page.tsx           # Scan history list (clickable rows)
+│   │   ├── history/[id]/page.tsx      # Scan detail — verdict, flags, AI chat follow-up
 │   │   ├── globals.css                # All styles + design tokens
 │   │   └── api/
 │   │       ├── analyze/route.ts       # LLM analysis proxy
 │   │       ├── chat/route.ts          # AI chat proxy
+│   │       ├── ocr/route.ts           # Groq Vision OCR (sharp → base64 → llama-4-scout)
 │   │       ├── profile/route.ts       # Profile CRUD
-│   │       ├── history/route.ts       # History CRUD
+│   │       ├── history/route.ts       # History CRUD (supports ?id= for single record)
 │   │       └── barcode/
 │   │           ├── decode/route.ts    # Barcode image → code
 │   │           └── lookup/route.ts    # Barcode → product data
