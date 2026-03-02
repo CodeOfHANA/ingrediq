@@ -114,24 +114,21 @@ export default function ScanPage() {
 
     const lookupBarcode = () => lookupBarcodeCode(barcodeInput)
 
-    /* ── OCR: extract text from ingredient label photo ── */
+    /* ── OCR: extract text from ingredient label photo (server-side) ── */
     const handleOcr = async (file: File) => {
         setOcrLoading(true)
         setError(null)
         setText('')
         try {
-            const { createWorker } = await import('tesseract.js')
-            const worker = await createWorker('eng', 1, {
-                logger: () => { },
-            })
-            const { data: { text: ocrText } } = await worker.recognize(file)
-            await worker.terminate()
-            const cleaned = ocrText.trim()
-            if (!cleaned) {
-                setError('No text could be extracted from this image. Try a clearer photo or use Manual Input.')
+            const formData = new FormData()
+            formData.append('image', file)
+            const res = await fetch('/api/ocr', { method: 'POST', body: formData })
+            const data = await res.json()
+            if (!res.ok) {
+                setError(data.error || 'OCR failed. Please try Manual Input.')
                 return
             }
-            setText(cleaned)
+            setText(data.text)
             setConfidence('MEDIUM')
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Unknown error'
