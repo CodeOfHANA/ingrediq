@@ -5,6 +5,12 @@
 // Secrets: supabase secrets set GROQ_API_KEY=gsk_...
 // Local:   supabase functions serve --env-file supabase/functions/.env
 
+// Deno type stubs — silences VS Code IDE warnings (does not affect runtime)
+declare const Deno: {
+    serve: (handler: (req: Request) => Response | Promise<Response>) => void
+    env: { get: (key: string) => string | undefined }
+}
+
 import { corsHeaders } from './cors.ts'
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
