@@ -120,8 +120,21 @@ export default function ScanPage() {
         setError(null)
         setText('')
         try {
+            // Convert HEIC/HEIF to JPEG client-side before upload
+            // (Vercel's sharp binary lacks libheif, so HEIC must be pre-converted)
+            let uploadFile: File = file
+            const isHeic = file.type === 'image/heic' || file.type === 'image/heif'
+                || file.name.toLowerCase().endsWith('.heic')
+                || file.name.toLowerCase().endsWith('.heif')
+            if (isHeic) {
+                const heic2any = (await import('heic2any')).default
+                const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 })
+                const blob = Array.isArray(converted) ? converted[0] : converted
+                uploadFile = new File([blob], file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'), { type: 'image/jpeg' })
+            }
+
             const formData = new FormData()
-            formData.append('image', file)
+            formData.append('image', uploadFile)
             const res = await fetch('/api/ocr', { method: 'POST', body: formData })
             const data = await res.json()
             if (!res.ok) {
