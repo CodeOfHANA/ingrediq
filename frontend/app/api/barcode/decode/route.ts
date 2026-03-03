@@ -31,7 +31,11 @@ export async function POST(req: NextRequest) {
         const inputBuffer = Buffer.from(arrayBuffer)
 
         // Preprocess: extract raw RGBA pixels via sharp
+        // .toColorspace('srgb') must come before .ensureAlpha() — without it, grayscale
+        // or unusual-colorspace images (e.g. some HEICs) produce 1–2 channel buffers
+        // instead of the 4-channel RGBA that ZBar's scanImageData requires.
         const { data: rawPixels, info } = await sharp(inputBuffer)
+            .toColorspace('srgb')
             .ensureAlpha()
             .raw()
             .toBuffer({ resolveWithObject: true })
@@ -68,6 +72,7 @@ export async function POST(req: NextRequest) {
         if (!symbols || symbols.length === 0) {
             const { data: grayRaw, info: grayInfo } = await sharp(inputBuffer)
                 .grayscale()
+                .toColorspace('srgb')
                 .ensureAlpha()
                 .raw()
                 .toBuffer({ resolveWithObject: true })

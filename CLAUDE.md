@@ -203,6 +203,7 @@ SUPABASE_ACCESS_TOKEN=...         # Used only for npx supabase CLI commands
 | OCR or barcode code | `skills/SKILL_SCANNING.md` |
 | UI / CSS / Next.js components | `skills/SKILL_UI.md` |
 | Supabase / API routes | `skills/SKILL_SUPABASE.md` |
+| Security — rate limiting, auth, CORS | `skills/SKILL_SECURITY.md` |
 | Starting a new module | `skills/SKILL.md` |
 
 ---
